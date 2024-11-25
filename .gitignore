@@ -162,5 +162,5 @@ cython_debug/
 #.idea/
 
 gan-venv/
-Model_Weights/GAN/*
+Model_Weights/*
 gan_plots
