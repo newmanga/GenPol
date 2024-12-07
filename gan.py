@@ -66,14 +66,22 @@ def get_env_dim(dataloader):
         break
     return {"states": state_dim, "actions": action_dim}
 
-def step(states, actions, discriminator, policy):
+def step(states, actions, discriminator: MLPDiscriminator, policy: GaussianMLPPolicy, log):
     # --- Train Discriminator ---
     loss_discriminator = discriminator.train_step(states, actions, policy)
 
     # --- Train Generator ---
     loss_generator, std_generator = policy.train_step(states, discriminator)
 
-    return loss_discriminator, loss_generator, std_generator
+    real_pred = discriminator.get_prediction(states, actions).mean()
+
+    if discriminator.diffusion:
+        discriminator.update_times(real_pred)
+
+    log["loss/discriminator"].append(loss_discriminator)
+    log["loss/generator"].append(loss_generator)
+    log["std/generator"].append(std_generator.mean(dim=0))
+    log["real_pred"].append(real_pred)
 
 def train_policy(epochs, dataloader, discriminator, policy, losses):
     total_batches = len(dataloader) * epochs
@@ -103,20 +111,17 @@ def train_disc(epochs, dataloader, discriminator, policy, losses):
                     )
                 pbar.update(1)
 
-def train_gan(epochs, dataloader, discriminator, policy, losses):
+def train_gan(epochs, dataloader, discriminator, policy, logger):
     total_batches = len(dataloader) * epochs
     with tqdm(total=total_batches) as pbar:
         for epoch in range(epochs):
             for batch_idx, batch in enumerate(dataloader):
-                d_loss , p_loss, p_std = step(batch["state"], batch["action"], discriminator, policy)
+                step(batch["state"], batch["action"], discriminator, policy, logger)
 
                 if batch_idx % 1000 == 0 or batch_idx == len(dataloader) - 1:
-                    losses["disc"].append(d_loss)
-                    losses["pol"].append(p_loss)
-                    losses["p_std"].append(p_std.mean(dim=0))
                     pbar.set_description(
                         f"Epoch [{epoch+1}/{epochs}], Batch [{batch_idx+1}/{len(dataloader)}], "
-                        f"D_Loss [{d_loss:.4f}], P_Loss [{p_loss:.4f}]"
+                        f"D_Loss [{logger['loss/discriminator'][-1]:.4f}], P_Loss [{logger['loss/generator'][-1]:.4f}]"
                     )
                 pbar.update(1)
 

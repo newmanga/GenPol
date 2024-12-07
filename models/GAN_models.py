@@ -79,10 +79,10 @@ class GaussianMLPPolicy(nn.Module):
                 action = dist.sample()
         return action
     
+    @torch.no_grad()
     def get_std(self, states):
-        with torch.no_grad():
-            _, log_std = self.forward(states)
-            std = torch.exp(log_std)
+        _, log_std = self.forward(states)
+        std = torch.exp(log_std)
         return std
         
     def train_step(self, states, discriminator):
@@ -118,7 +118,10 @@ class MLPDiscriminator(nn.Module):
                  gradient_penalty_weight=0.0,
                  l2_penalty_weight=0.001,
                  objective="regular",
-                 num_epochs_per_step=1):
+                 num_epochs_per_step=1,
+                 diffusion=True,
+                 t_max=100,
+                 t_rate=1000):
         super(MLPDiscriminator, self).__init__()
         
         self.ent_reg_weight = ent_reg_weight #TODO update name for consistency
@@ -126,10 +129,11 @@ class MLPDiscriminator(nn.Module):
         self.l2_penalty_weight = l2_penalty_weight
         self.objective = objective
         self.num_epochs_per_step = num_epochs_per_step
+        self.diffusion = diffusion
 
         # Build network
         layers = []
-        input_size = env_dim["states"] + env_dim["actions"]
+        input_size = env_dim["states"] + env_dim["actions"] + (1 if self.diffusion else 0)
         for size in hidden_sizes:
             layers.append(nn.Linear(input_size, size))
             layers.append(activation())
@@ -141,7 +145,30 @@ class MLPDiscriminator(nn.Module):
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
         self.loss_fn = nn.BCEWithLogitsLoss()  # Binary Cross-Entropy Loss with logits
 
+        ## Diffusion
+        self.p = 0.0
+        self.t_min = 0
+        self.t_max = t_max
+        self.t = 0.0
+        self.noise_std = 1.0
+        self.t_rate = t_rate
+        self.t_epl = np.zeros(64, dtype=np.int32)
+        self.set_difussion()
+
     def forward(self, states_actions):
+
+        if self.diffusion:
+
+            t = torch.from_numpy(np.random.choice(self.t_epl, size=states_actions.shape[0], replace=True)).unsqueeze(-1)
+            noise = torch.randn_like(states_actions) * self.noise_std
+
+            alphas_t_sqrt = self.alphas_bar_sqrt[t]
+            one_minus_alphas_bar_t_sqrt = self.one_minus_alphas_bar_sqrt[t]
+
+            states_actions = alphas_t_sqrt * states_actions + one_minus_alphas_bar_t_sqrt * noise
+
+            states_actions = torch.cat((states_actions, t), dim=1)
+
         return self.network(states_actions)
 
     def compute_loss(self, logits, targets):
@@ -194,7 +221,40 @@ class MLPDiscriminator(nn.Module):
 
         return loss.item()
 
-    def get_prediction(self, batch):
-        with torch.no_grad():
-            logits = self.forward(batch)
-            return logits.sigmoid().numpy()
+    @torch.no_grad()
+    def get_prediction(self, states, actions):
+        real_state_action = torch.cat([states, actions], dim=-1)
+        logits = self.forward(real_state_action)
+        return logits.sigmoid().numpy()
+    
+    def update_times(self, real_pred, target = 0.6):
+        overfitting_metric = np.sign(real_pred - target)
+        adjust = overfitting_metric / self.t_rate
+        self.p = (self.p + adjust).clip(min=0., max=1.)
+        self.t = self.t_min + int((self.t_max - self.t_min) * self.p)
+        self.update_t_epl()
+        self.set_difussion()
+
+    def update_t_epl(self):
+        ts_dist = 'priority'
+        self.t_epl = np.zeros(64, dtype=np.int32)
+        if (self.t <= 1):
+            return
+        diffusion_ind = 32
+        t_diffusion = np.zeros((diffusion_ind,)).astype(np.int32)
+        if ts_dist == 'priority':
+            prob_t = np.arange(self.t+1) / np.arange(self.t+1).sum()
+            t_diffusion = np.random.choice(np.arange(0, self.t + 1), size=diffusion_ind, p=prob_t)
+        elif ts_dist == 'uniform':
+            t_diffusion = np.random.choice(np.arange(0, self.t + 1), size=diffusion_ind)
+        self.t_epl[:diffusion_ind] = t_diffusion
+
+    def set_difussion(self):
+        beta_start = 01e-4
+        beta_end = 2e-2
+        betas = torch.linspace(beta_start, beta_end, int(self.t))
+
+        alphas = 1.0 - betas
+        alphas_cumprod = torch.cat([torch.tensor([1.]), alphas.cumprod(dim=0)])
+        self.alphas_bar_sqrt = torch.sqrt(alphas_cumprod)
+        self.one_minus_alphas_bar_sqrt = torch.sqrt(1 - alphas_cumprod)

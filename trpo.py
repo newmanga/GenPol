@@ -278,8 +278,8 @@ class TRPO():
             p.data += g
             n += numel
 
-def try_policy(policy, normalize_state=False, mean=0, std=1, max_num_steps=200, time_delay=0.1):
-    env = create_halfcheetah_env(True, 1)
+def try_policy(policy, render=True, normalize_state=False, mean=0, std=1, max_num_steps=200, time_delay=0.1):
+    env = create_halfcheetah_env(render, 1)
     state = to_tensor(env.reset()[0])
     if normalize_state:
         state = normalize(state, mean, std)
@@ -293,7 +293,6 @@ def try_policy(policy, normalize_state=False, mean=0, std=1, max_num_steps=200, 
 
         action = policy.take_action(state)
         next_state, reward, done, trunc = env.take_step(state, action)
-        # print(t)
         next_state = to_tensor(next_state)
         if normalize_state:
             next_state = normalize(next_state, mean, std)
@@ -306,6 +305,10 @@ def try_policy(policy, normalize_state=False, mean=0, std=1, max_num_steps=200, 
 
         time.sleep(time_delay)  # Simulate a delay
     return sum_rewards/num_steps
+
+def get_total_rewards(policy, states):
+    actions = policy.take_action(states)
+
 
 
 # Example usage
