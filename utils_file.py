@@ -12,6 +12,11 @@ EXPERT_DATA_ACTIONS_PATH = EXPERT_DATA_PATH / "actions.pt"
 EXPERT_DATA_REWARDS_PATH = EXPERT_DATA_PATH / "rewards.pt"
 EXPERT_DATA_NEXT_STATES_PATH = EXPERT_DATA_PATH / "next_states.pt"
 
+if torch.cuda.is_available():
+    device = "cuda"
+else:
+    device = "cpu"
+
 def normalize(A, mean, std):
     # mean = A.mean(dim=0)
     # std = A.std(dim=0) + 1e-8

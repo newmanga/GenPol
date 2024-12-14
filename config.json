@@ -1,0 +1,18 @@
+{
+    "HalfCheetah-v5": {
+        "num_iters": 3000,
+        "num_steps_per_iter": 200,
+        "horizon": null,
+        "disc_lr": 1e-4,
+        "lambda": 1e-3,
+        "gae_gamma": 0.9,
+        "gae_lambda": 0.9,
+        "epsilon": 0.01,
+        "max_kl": 0.01,
+        "damping_coeff": 0.1,
+        "entropy_w": 1e-3,
+        "normalize_advantage": true,
+        "exp_ref_rate":100,
+        "hidden_sizes": [50,50,50]
+    }
+}
