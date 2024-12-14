@@ -35,9 +35,7 @@ The key results are visualized in the following plots:
 
 ## References
 1. Ho, J., & Ermon, S. (2016). Generative Adversarial Imitation Learning (GAIL).
-2. Karras, T., et al. (2020). Analyzing Large-Scale GAN Training Using a New Performance Metric.
-3. Xiao, Y., et al. (2021). Tackling Mode Collapse in GANs with Gaussian-Mixture Distributed Instance Noise.
-4. Wang, Y., et al. (2022). Diffusion Models for Generative Modeling.
+2. Wang, Z., et al. (2023). DIFFUSION-GAN: TRAINING GANS WITH DIFFUSION.
 
 ## License
 This project is licensed under the MIT License. See the LICENSE file for more details.
